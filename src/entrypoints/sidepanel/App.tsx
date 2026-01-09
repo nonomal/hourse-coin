@@ -9,21 +9,14 @@ import {
 	Popconfirm,
 	Row,
 	Space,
+	Switch,
 } from "antd";
 import type { NoticeType } from "antd/es/message/interface";
 import { useCallback, useEffect, useState } from "react";
-
-interface infoInter {
-	userName: string;
-	idCard: string;
-	phone: string;
-	appointmentBranch: string;
-	appointmentQuantity: string;
-}
+import type { infoInter } from "./types";
 
 const App: React.FC = () => {
-	const [info, setInfo] = useState<infoInter[]>([]);
-
+	// ui层逻辑
 	// 将 message/useMessage 提前并 memoize cusAlert
 	const [messageApi, contextHolder] = message.useMessage();
 	const cusAlert = useCallback(
@@ -32,6 +25,10 @@ const App: React.FC = () => {
 		},
 		[messageApi],
 	);
+
+	// 数据层逻辑
+
+	const [info, setInfo] = useState<infoInter[]>([]);
 
 	// 获取本地存储的数据（memoized）
 	const getInfo = useCallback(async () => {
@@ -80,7 +77,6 @@ const App: React.FC = () => {
 
 	// 确认新增或修改信息按钮
 	const handleSubmit = async (value: infoInter) => {
-		console.log(value);
 		setConfirmLoading(true);
 		const storageInfo = await storage.getItem<infoInter[]>("local:info");
 
@@ -93,6 +89,12 @@ const App: React.FC = () => {
 		} else {
 			// 新增：添加新数据
 			if (storageInfo) {
+				for (const item of storageInfo) {
+					if (item.idCard === value.idCard) {
+						cusAlert("error", "身份证号不能相同");
+						return;
+					}
+				}
 				storageInfo.push(value);
 				await storage.setItem("local:info", storageInfo);
 			} else {
@@ -112,35 +114,48 @@ const App: React.FC = () => {
 	};
 
 	// 填写逻辑(给主页面发信息，填充逻辑在主页面处理)
-	const handleFill = (person: (typeof info)[number]) => {
-		browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-			if (!tabs[0]?.id) {
-				alert("无法获取当前标签页，请刷新后重试");
-				return;
-			}
+	const handleFill = useCallback(
+		(person: infoInter) => {
+			browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+				if (!tabs[0]?.id) {
+					alert("无法获取当前标签页，请刷新后重试");
+					return;
+				}
 
-			browser.tabs.sendMessage(
-				tabs[0].id,
-				{
-					action: "fillPersonalInfo",
-					data: person,
-				},
-				(response) => {
-					if (browser.runtime.lastError) {
-						console.error("消息发送错误:", browser.runtime.lastError);
-						cusAlert("error", "连接失败，请刷新页面后重试");
-						return;
-					}
+				browser.tabs.sendMessage(
+					tabs[0].id,
+					{
+						action: "fillPersonalInfo",
+						data: person,
+					},
+					(response) => {
+						if (browser.runtime.lastError) {
+							console.error("消息发送错误:", browser.runtime.lastError);
+							cusAlert("error", "连接失败，请刷新页面后重试");
+							return;
+						}
 
-					if (response?.success) {
-						cusAlert("success", "信息填写成功！");
-					} else {
-						cusAlert("error", "信息填写失败，请检查页面是否正确");
-					}
-				},
-			);
-		});
-	};
+						if (response?.success) {
+							cusAlert("success", "信息填写成功！");
+						} else {
+							cusAlert("error", "信息填写失败，请检查页面是否正确");
+						}
+					},
+				);
+			});
+		},
+		[cusAlert],
+	);
+
+	const defaultFill = useCallback(async () => {
+		const res = await storage.getItem<infoInter[]>("local:info");
+		if (!res) return;
+		handleFill(res[0]);
+	}, [handleFill]);
+
+	useEffect(() => {
+		defaultFill();
+	}, [defaultFill]);
 
 	// 删除事件
 	const handleDelete = async (idCard: string) => {
@@ -149,6 +164,12 @@ const App: React.FC = () => {
 		await storage.setItem("local:info", info);
 		getInfo();
 		cusAlert("success", "删除成功");
+	};
+
+	// 默认填充事件
+	const handelDefaultFill = (person: infoInter, e: boolean) => {
+		console.log(person);
+		console.log(e);
 	};
 
 	return (
@@ -177,7 +198,12 @@ const App: React.FC = () => {
 				>
 					<Form.Item<infoInter>
 						name="userName"
-						rules={[{ required: true, message: "请输入姓名" }]}
+						rules={[
+							{
+								required: true,
+								message: "请输入正确的姓名",
+							},
+						]}
 					>
 						<Space.Compact className="w-full">
 							<Space.Addon className="whitespace-nowrap">姓名</Space.Addon>
@@ -187,7 +213,13 @@ const App: React.FC = () => {
 
 					<Form.Item<infoInter>
 						name="idCard"
-						rules={[{ required: true, message: "请输入身份证号" }]}
+						rules={[
+							{
+								required: true,
+								message: "请输入正确的身份证号",
+								pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/,
+							},
+						]}
 					>
 						<Space.Compact className="w-full">
 							<Space.Addon className="whitespace-nowrap">身份证号</Space.Addon>
@@ -197,7 +229,13 @@ const App: React.FC = () => {
 
 					<Form.Item<infoInter>
 						name="phone"
-						rules={[{ required: true, message: "请输入手机号" }]}
+						rules={[
+							{
+								required: true,
+								message: "请输入正确的手机号",
+								pattern: /^1[3456789]\d{9}$/,
+							},
+						]}
 					>
 						<Space.Compact className="w-full">
 							<Space.Addon className="whitespace-nowrap">手机号</Space.Addon>
@@ -207,7 +245,7 @@ const App: React.FC = () => {
 
 					<Form.Item<infoInter>
 						name="appointmentBranch"
-						rules={[{ required: true, message: "请输入预约网点" }]}
+						rules={[{ required: true, message: "请输入正确的预约网点" }]}
 					>
 						<Space.Compact className="w-full">
 							<Space.Addon className="whitespace-nowrap">预约网点</Space.Addon>
@@ -217,7 +255,7 @@ const App: React.FC = () => {
 
 					<Form.Item<infoInter>
 						name="appointmentQuantity"
-						rules={[{ required: true, message: "请输入预约数量" }]}
+						rules={[{ required: true, message: "请输入正确的预约数量" }]}
 					>
 						<Space.Compact className="w-full">
 							<Space.Addon className="whitespace-nowrap">预约数量</Space.Addon>
@@ -247,7 +285,7 @@ const App: React.FC = () => {
 							info.map((person) => (
 								<Col key={person.idCard} xs={24} sm={12} md={8} lg={6} xl={6}>
 									<Card style={{ width: "100%" }}>
-										<div className="flex flex-col gap-6">
+										<div className="relative flex flex-col gap-6">
 											<div className="flex flex-col gap-2">
 												<p>姓名：{person.userName}</p>
 												<p>证件号：{person.idCard}</p>
@@ -281,6 +319,13 @@ const App: React.FC = () => {
 														删除
 													</Button>
 												</Popconfirm>
+											</div>
+											<div className="absolute top-0 right-0 flex items-center gap-2">
+												设为默认填充
+												<Switch
+													defaultChecked
+													onChange={(e) => handelDefaultFill(person, e)}
+												/>
 											</div>
 										</div>
 									</Card>
