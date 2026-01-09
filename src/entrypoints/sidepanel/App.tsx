@@ -13,7 +13,7 @@ import {
 } from "antd";
 import type { NoticeType } from "antd/es/message/interface";
 import { useCallback, useEffect, useState } from "react";
-import type { infoInter } from "./types";
+import type { infoInter } from "@/types/useInfo";
 
 const App: React.FC = () => {
 	// ui层逻辑

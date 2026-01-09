@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { infoInter } from "../entrypoints/sidepanel/types";
+import type { infoInter } from "@/types/useInfo";
 
 const STORAGE_KEY = "local:info";
 const DEFAULT_KEY = "local:defaultId";
@@ -7,7 +7,7 @@ const DEFAULT_KEY = "local:defaultId";
 type Result = { success: boolean; message?: string };
 
 export default function useInfoStorage() {
-    const [info, setInfo] = useState<infoInter[]>([]);
+  const [info, setInfo] = useState<infoInter[]>([]);
   const [defaultId, setDefaultIdState] = useState<string | undefined>(
     undefined
   );
