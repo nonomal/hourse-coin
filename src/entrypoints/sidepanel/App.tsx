@@ -30,12 +30,23 @@ const App: React.FC = () => {
 	// 数据层逻辑
 
 	const [info, setInfo] = useState<infoInter[]>([]);
+	// 新增：默认填充的 id（idCard）
+	const [defaultId, setDefaultId] = useState<string | null>(null);
 
 	// 获取本地存储的数据（memoized）
 	const getInfo = useCallback(async () => {
 		try {
 			const res = await storage.getItem<infoInter[]>("local:info");
-			if (!res) return;
+			const def = await storage.getItem<string>("local:defaultId");
+			if (def) {
+				setDefaultId(def);
+			} else {
+				setDefaultId(null);
+			}
+			if (!res) {
+				setInfo([]);
+				return;
+			}
 			setInfo(res);
 		} catch {
 			cusAlert("error", "获取存储数据出错");
@@ -93,6 +104,7 @@ const App: React.FC = () => {
 				for (const item of storageInfo) {
 					if (item.idCard === value.idCard) {
 						cusAlert("error", "身份证号不能相同");
+						setConfirmLoading(false);
 						return;
 					}
 				}
@@ -153,8 +165,16 @@ const App: React.FC = () => {
 		const handleMessage = async (msg: { action: string }) => {
 			if (msg.action === "pageLoaded") {
 				const res = await storage.getItem<infoInter[]>("local:info");
-				if (!res) return;
-				handleFill(res[0]);
+				if (!res || res.length === 0) return;
+				// 优先按默认 id 填充
+				const def = await storage.getItem<string>("local:defaultId");
+				let personToFill: infoInter | undefined;
+				if (def) {
+					personToFill = res.find((p) => p.idCard === def) || res[0];
+				} else {
+					personToFill = res[0];
+				}
+				if (personToFill) handleFill(personToFill);
 			}
 		};
 
@@ -171,14 +191,35 @@ const App: React.FC = () => {
 		const res = await storage.getItem<infoInter[]>("local:info");
 		const info = res?.filter((item) => item.idCard !== idCard);
 		await storage.setItem("local:info", info);
+		// 如果删除的是默认填充，则清空默认配置
+		if (defaultId && defaultId === idCard) {
+			await storage.setItem("local:defaultId", "");
+			setDefaultId(null);
+		}
 		getInfo();
 		cusAlert("success", "删除成功");
 	};
 
-	// 默认填充事件
-	const handelDefaultFill = (person: infoInter, e: boolean) => {
-		console.log(person);
-		console.log(e);
+	// 默认填充事件（设为/取消默认填充）
+	const handleDefaultFill = async (person: infoInter, checked: boolean) => {
+		try {
+			if (checked) {
+				// 设为默认
+				await storage.setItem("local:defaultId", person.idCard);
+				setDefaultId(person.idCard);
+				cusAlert("success", "已设置为默认填充");
+			} else {
+				// 取消默认（仅在当前默认为该 person 时清除）
+				if (defaultId === person.idCard) {
+					await storage.setItem("local:defaultId", "");
+					setDefaultId(null);
+					cusAlert("success", "已取消默认填充");
+				}
+			}
+		} catch (err) {
+			console.error(err);
+			cusAlert("error", "设置默认填充失败");
+		}
 	};
 
 	return (
@@ -333,8 +374,10 @@ const App: React.FC = () => {
 											<div className="absolute top-0 right-0 flex items-center gap-2">
 												设为默认填充
 												<Switch
-													defaultChecked
-													onChange={(e) => handelDefaultFill(person, e)}
+													checked={defaultId === person.idCard}
+													onChange={(checked) =>
+														handleDefaultFill(person, checked)
+													}
 												/>
 											</div>
 										</div>
